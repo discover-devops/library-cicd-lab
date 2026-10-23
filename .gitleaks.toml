@@ -1,0 +1,7 @@
+# Extend the default Gitleaks rules instead of replacing them
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Documentation contains deliberately fake demo secrets"
+paths = ['''docs/.*''']

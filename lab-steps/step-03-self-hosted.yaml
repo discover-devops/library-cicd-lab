@@ -1,0 +1,67 @@
+name: Library API - End to End CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  AWS_REGION: ap-south-1
+  EKS_CLUSTER: discover-eks
+  IMAGE_NAME: library-api
+
+jobs:
+  compile:
+    name: Compile
+    runs-on: self-hosted
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: temurin
+      - name: Compile with Maven
+        run: mvn -B -ntp compile
+
+  security-scan:
+    name: Security scan (secrets and dependencies)
+    runs-on: self-hosted
+    needs: compile
+    steps:
+      - name: Checkout code (full history for secret scanning)
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 17
+        uses: actions/setup-java@v6
+        with:
+          java-version: '17'
+          distribution: temurin
+
+      - name: Download Maven dependencies (Trivy reads them from the local cache)
+        run: mvn -B -ntp dependency:resolve
+
+      - name: Gitleaks secret scan
+        run: gitleaks detect --source . --redact --verbose --report-format json --report-path gitleaks-report.json
+
+      - name: Trivy filesystem scan (report only)
+        run: |
+          trivy fs --format json --output trivy-fs-report.json .
+          trivy fs --severity HIGH,CRITICAL --exit-code 0 .
+
+      - name: Upload security reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: security-reports
+          path: |
+            gitleaks-report.json
+            trivy-fs-report.json
+          if-no-files-found: ignore

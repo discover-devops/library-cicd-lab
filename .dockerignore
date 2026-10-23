@@ -1,0 +1,3 @@
+# Send only the JAR to the Docker build context
+*
+!target/library-api.jar
