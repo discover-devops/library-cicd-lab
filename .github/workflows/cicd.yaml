@@ -124,3 +124,34 @@ jobs:
             -Dsonar.host.url="$SONAR_HOST_URL" \
             -Dsonar.token="$SONAR_TOKEN" \
             -Dsonar.qualitygate.wait=true
+
+  docker-build-scan-push:
+    name: Build image, scan it, push to Docker Hub
+    runs-on: self-hosted
+    needs: quality-and-package
+    env:
+      IMAGE: ${{ vars.DOCKER_HUB_USERNAME }}/library-api
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: app-jar
+          path: target/
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v4
+        with:
+          username: ${{ vars.DOCKER_HUB_USERNAME }}
+          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+
+      - name: Build Docker image
+        run: docker build -t "$IMAGE:${{ github.sha }}" -t "$IMAGE:latest" .
+
+      - name: Trivy image scan (fails the job on CRITICAL findings)
+        run: trivy image --severity CRITICAL --ignore-unfixed --exit-code 1 "$IMAGE:${{ github.sha }}"
+
+      - name: Push image to Docker Hub
+        run: docker push --all-tags "$IMAGE"
